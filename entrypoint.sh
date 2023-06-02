@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
+cd /tmp
+
 
 # 设置各变量，网页用户和密码，WS 路径前缀。(注意:伪装路径不需要 / 符号开始,为避免不必要的麻烦,请不要使用特殊符号.)
 WEB_USERNAME=admin
 WEB_PASSWORD=password
-WSPATH=daki
-UUID=de04add9-5c68-8bab-950c-08cd5320df18
+WSPATH=${WSPATH:-'argo'}
+UUID=${UUID:-'de04add9-5c68-8bab-950c-08cd5320df18'}
 
 # 哪吒4个参数，ssl/tls 看是否需要，不需要的话可以留空，删除或在这4行最前面加 # 以注释
-NEZHA_SERVER="$NEZHA_SERVER"
-NEZHA_PORT="$NEZHA_PORT"
-NEZHA_KEY="$NEZHA_KEY"
+NEZHA_SERVER=
+NEZHA_PORT=
+NEZHA_KEY=
 NEZHA_TLS="$NEZHA_TLS"
 
 # Argo 固定域名隧道的两个参数,这个可以填 Json 内容或 Token 内容，不需要的话可以留空，删除或在这三行最前面加 # 以注释
@@ -28,235 +30,7 @@ check_dependencies() {
   [ -n "$DEPS" ] && { apt-get update >/dev/null 2>&1; apt-get install -y $DEPS >/dev/null 2>&1; }
 }
 
-# 生成 X 配置文件
-generate_config() {
-  cat > config.json << EOF
-{
-    "log":{
-        "access":"/dev/null",
-        "error":"/dev/null",
-        "loglevel":"none"
-    },
-    "inbounds":[
-        {
-            "port":8080,
-            "protocol":"vless",
-            "settings":{
-                "clients":[
-                    {
-                        "id":"${UUID}",
-                        "flow":"xtls-rprx-vision"
-                    }
-                ],
-                "decryption":"none",
-                "fallbacks":[
-                    {
-                        "dest":3001
-                    },
-                    {
-                        "path":"/${WSPATH}-vless",
-                        "dest":3002
-                    },
-                    {
-                        "path":"/${WSPATH}-vmess",
-                        "dest":3003
-                    },
-                    {
-                        "path":"/${WSPATH}-trojan",
-                        "dest":3004
-                    },
-                    {
-                        "path":"/${WSPATH}-shadowsocks",
-                        "dest":3005
-                    }
-                ]
-            },
-            "streamSettings":{
-                "network":"tcp"
-            }
-        },
-        {
-            "port":3001,
-            "listen":"127.0.0.1",
-            "protocol":"vless",
-            "settings":{
-                "clients":[
-                    {
-                        "id":"${UUID}"
-                    }
-                ],
-                "decryption":"none"
-            },
-            "streamSettings":{
-                "network":"ws",
-                "security":"none"
-            }
-        },
-        {
-            "port":3002,
-            "listen":"127.0.0.1",
-            "protocol":"vless",
-            "settings":{
-                "clients":[
-                    {
-                        "id":"${UUID}",
-                        "level":0
-                    }
-                ],
-                "decryption":"none"
-            },
-            "streamSettings":{
-                "network":"ws",
-                "security":"none",
-                "wsSettings":{
-                    "path":"/${WSPATH}-vless"
-                }
-            },
-            "sniffing":{
-                "enabled":true,
-                "destOverride":[
-                    "http",
-                    "tls",
-                    "quic"
-                ],
-                "metadataOnly":false
-            }
-        },
-        {
-            "port":3003,
-            "listen":"127.0.0.1",
-            "protocol":"vmess",
-            "settings":{
-                "clients":[
-                    {
-                        "id":"${UUID}",
-                        "alterId":0
-                    }
-                ]
-            },
-            "streamSettings":{
-                "network":"ws",
-                "wsSettings":{
-                    "path":"/${WSPATH}-vmess"
-                }
-            },
-            "sniffing":{
-                "enabled":true,
-                "destOverride":[
-                    "http",
-                    "tls",
-                    "quic"
-                ],
-                "metadataOnly":false
-            }
-        },
-        {
-            "port":3004,
-            "listen":"127.0.0.1",
-            "protocol":"trojan",
-            "settings":{
-                "clients":[
-                    {
-                        "password":"${UUID}"
-                    }
-                ]
-            },
-            "streamSettings":{
-                "network":"ws",
-                "security":"none",
-                "wsSettings":{
-                    "path":"/${WSPATH}-trojan"
-                }
-            },
-            "sniffing":{
-                "enabled":true,
-                "destOverride":[
-                    "http",
-                    "tls",
-                    "quic"
-                ],
-                "metadataOnly":false
-            }
-        },
-        {
-            "port":3005,
-            "listen":"127.0.0.1",
-            "protocol":"shadowsocks",
-            "settings":{
-                "clients":[
-                    {
-                        "method":"chacha20-ietf-poly1305",
-                        "password":"${UUID}"
-                    }
-                ],
-                "decryption":"none"
-            },
-            "streamSettings":{
-                "network":"ws",
-                "wsSettings":{
-                    "path":"/${WSPATH}-shadowsocks"
-                }
-            },
-            "sniffing":{
-                "enabled":true,
-                "destOverride":[
-                    "http",
-                    "tls",
-                    "quic"
-                ],
-                "metadataOnly":false
-            }
-        }
-    ],
-    "dns":{
-        "servers":[
-            "https+local://8.8.8.8/dns-query"
-        ]
-    },
-    "outbounds":[
-        {
-            "protocol":"freedom"
-        },
-        {
-            "tag":"WARP",
-            "protocol":"wireguard",
-            "settings":{
-                "secretKey":"YFYOAdbw1bKTHlNNi+aEjBM3BO7unuFC5rOkMRAz9XY=",
-                "address":[
-                    "172.16.0.2/32",
-                    "2606:4700:110:8a36:df92:102a:9602:fa18/128"
-                ],
-                "peers":[
-                    {
-                        "publicKey":"bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=",
-                        "allowedIPs":[
-                            "0.0.0.0/0",
-                            "::/0"
-                        ],
-                        "endpoint":"162.159.193.10:2408"
-                    }
-                ],
-                "reserved":[78, 135, 76],
-                "mtu":1280
-            }
-        }
-    ],
-    "routing":{
-        "domainStrategy":"AsIs",
-        "rules":[
-            {
-                "type":"field",
-                "domain":[
-                    "domain:openai.com",
-                    "domain:ai.com"
-                ],
-                "outboundTag":"WARP"
-            }
-        ]
-    }
-}
-EOF
-}
+
 
 generate_argo() {
   cat > argo.sh << ABC
@@ -269,10 +43,11 @@ FTP_DOMAIN=${FTP_DOMAIN}
 
 # 下载并运行 Argo
 check_file() {
-  [ ! -e cloudflared ] && wget -O cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 && chmod +x cloudflared
+  [ ! -e cloudflared ] && curl -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 && chmod +x cloudflared
 }
 
 run() {
+  chmod +x cloudflared
   if [[ -n "\${ARGO_AUTH}" && -n "\${ARGO_DOMAIN}" ]]; then
     if [[ "\$ARGO_AUTH" =~ TunnelSecret ]]; then
       echo "\$ARGO_AUTH" | sed 's@{@{"@g;s@[,:]@"\0"@g;s@}@"}@g' > tunnel.json
@@ -375,14 +150,15 @@ check_variable() {
 # 下载最新版本 Nezha Agent
 download_agent() {
   if [ ! -e nezha-agent ]; then
-    URL=\$(wget -qO- -4 "https://api.github.com/repos/naiba/nezha/releases/latest" | grep -o "https.*linux_amd64.zip")
-    wget -t 2 -T 10 -N \${URL}
+    URL=$(curl -s "https://api.github.com/repos/naiba/nezha/releases/latest" | grep -o "https.*linux_amd64.zip")
+    curl -sL -o nezha-agent_linux_amd64.zip ${URL}
     unzip -qod ./ nezha-agent_linux_amd64.zip && rm -f nezha-agent_linux_amd64.zip
   fi
 }
 
 # 运行客户端
 run() {
+  chmod +x nezha-agent
   TLS=\${NEZHA_TLS:+'--tls'}
   [[ ! \$PROCESS =~ nezha-agent && -e nezha-agent ]] && ./nezha-agent -s \${NEZHA_SERVER}:\${NEZHA_PORT} -p \${NEZHA_KEY} \${TLS} 2>&1 &
 }
@@ -501,6 +277,6 @@ generate_filebrowser
 generate_root
 
 [ -e nezha.sh ] && bash nezha.sh
-[ -e argo.sh ] && bash argo.s
+[ -e argo.sh ] && bash argo.sh
 [ -e ttyd.sh ] && bash ttyd.sh
 [ -e filebrowser.sh ] && bash filebrowser.sh

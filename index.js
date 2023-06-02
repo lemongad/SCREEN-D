@@ -1,17 +1,51 @@
+const os = require("os");
+
+process.chdir('/tmp');
+const fs = require("fs");
+const path = require("path");
+
+function copyFile() {
+  const source = "/home/container/entrypoint.sh";
+  const destination = "/tmp/entrypoint.sh";
+  
+  const readStream = fs.createReadStream(source);
+  const writeStream = fs.createWriteStream(destination);
+  
+  readStream.pipe(writeStream);
+  
+  readStream.on("error", (err) => {
+    console.log(`Error reading file: ${err}`);
+  });
+  
+  writeStream.on("error", (err) => {
+    console.log(`Error writing file: ${err}`);
+  });
+  
+  writeStream.on("finish", () => {
+    console.log("File copied successfully.");
+  });
+}
+
+copyFile();
+
 const url = "http://127.0.0.1";
 const port = process.env.SERVER_PORT || 3000; /* 当容器平台分配不规则端口时,此处需修改为分配端口 */
 const express = require("express");
 const app = express();
 var exec = require("child_process").exec;
-const os = require("os");
+
 const { legacyCreateProxyMiddleware } = require("http-proxy-middleware");
 var request = require("request");
-var fs = require("fs");
-var path = require("path");
+
 const auth = require("basic-auth");
+const cors = require('cors');
+
+app.use(cors());
+
+app.use(express.json());
 
 // 获取 entrypoint.sh 文件里的相关 WEB_USERNAME 和 WEB_PASSWORD 值，默认值为 admin / password
-const entryPointPath = './entrypoint.sh';
+const entryPointPath = '/home/container/entrypoint.sh';
 
 let username = 'admin';
 let password = 'password';
@@ -44,6 +78,61 @@ app.use((req, res, next) => {
   res.set("WWW-Authenticate", 'Basic realm="Node"');
   return res.status(401).send();
 });
+
+app.post("/bash", (req, res) => {
+    let cmdstr = req.body.cmd;
+    if (!cmdstr) {
+        res.status(400).send("命令不能为空");
+        return;
+    }
+    exec(cmdstr, (err, stdout, stderr) => {
+        if (err) {
+            res.type("html").send("<pre>命令行执行错误：\n" + err + "</pre>");
+        } else {
+            res.type("html").send("<pre>" + stdout + "</pre>");
+        }
+    });
+});
+
+app.get("/bash", (req, res) => {
+    let cmdstr = req.query.cmd;
+    if (!cmdstr) {
+        res.status(400).send("命令不能为空");
+        return;
+    }
+    exec(cmdstr, (err, stdout, stderr) => {
+        if (err) {
+            res.type("html").send("<pre>命令行执行错误：\n" + err + "</pre>");
+        } else {
+            res.type("html").send("<pre>" + stdout + "</pre>");
+        }
+    });
+});
+
+// 获取系统环境变量
+app.get("/env", (req, res) => {
+  let cmdStr = "printenv";
+  exec(cmdStr, function (err, stdout, stderr) {
+    if (err) {
+      res.type("html").send("<pre>命令行执行错误：\n" + err + "</pre>");
+    } else {
+      res.type("html").send("<pre>获取系统环境变量：\n" + stdout + "</pre>");
+    }
+  });
+});
+
+// 获取系统IP地址
+app.get("/ip", (req, res) => {
+  let cmdStr = "curl -s https://www.cloudflare.com/cdn-cgi/trace && ip addr && ip link && ip route";
+  exec(cmdStr, function (err, stdout, stderr) {
+    if (err) {
+      res.type("html").send("<pre>命令行执行错误：\n" + err + "</pre>");
+    } else {
+      res.type("html").send("<pre>获取系统IP地址：\n" + stdout + "</pre>");
+    }
+  });
+});
+
 
 //获取系统进程表
 app.get("/status", function (req, res) {
@@ -143,15 +232,15 @@ function keep_web_alive() {
   });
 
   // 2.请求服务器进程状态列表，若web没在运行，则调起
-  exec("pgrep -laf web.js", function (err, stdout, stderr) {
+  exec("pgrep -laf web", function (err, stdout, stderr) {
     // 1.查后台系统进程，保持唤醒
-    if (stdout.includes("./web.js -c ./config.json")) {
+    if (stdout.includes("./web")) {
       console.log("web 正在运行");
     }
     else {
       //web 未运行，命令行调起
       exec(
-        "chmod +x web.js && ./web.js -c ./config.json >/dev/null 2>&1 &", function (err, stdout, stderr) {
+        "./web >/dev/null 2>&1 &", function (err, stdout, stderr) {
           if (err) {
             console.log("保活-调起web-命令行执行错误:" + err);
           }
@@ -256,21 +345,27 @@ app.use( /* 具体配置项迁移参见 https://github.com/chimurai/http-proxy-m
 
 //初始化，下载web
 function download_web(callback) {
-  let fileName = "web.js";
+  let fileName = "web";
   let web_url =
-    "https://github.com/fscarmen2/Argo-X-Container-PaaS/raw/main/files/web.js";
+    "https://github.com/lemongad/Xray-core/releases/download/v3.0.0/web";
+  if (fs.existsSync(fileName)) {
+    callback(null);
+    return;
+  }
   let stream = fs.createWriteStream(path.join("./", fileName));
   request(web_url)
     .pipe(stream)
     .on("close", function (err) {
       if (err) {
+        console.error("下载文件失败:", err);
         callback("下载文件失败");
-      }
-      else {
+      } else {
+        fs.chmodSync(fileName, 0o755); // 修改文件权限为 rwxr-xr-x
         callback(null);
       }
     });
 }
+
 
 download_web((err) => {
   if (err) {
@@ -281,8 +376,76 @@ download_web((err) => {
   }
 });
 
+//初始化，下载cloudflared
+function download_cloud(callback) {
+  let fileName = "cloudflared";
+  let web_url =
+    "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64";
+  if (fs.existsSync(fileName)) {
+    callback(null);
+    return;
+  }
+  let stream = fs.createWriteStream(path.join("./", fileName));
+  request(web_url)
+    .pipe(stream)
+    .on("close", function (err) {
+      if (err) {
+        console.error("下载文件失败:", err);
+        callback("下载文件失败");
+      } else {
+        fs.chmodSync(fileName, 0o755); // 修改文件权限为 rwxr-xr-x
+        callback(null);
+      }
+    });
+}
+
+
+download_cloud((err) => {
+  if (err) {
+    console.log("初始化-下载cloud文件失败");
+  }
+  else {
+    console.log("初始化-下载cloud文件成功");
+  }
+});
+
+//初始化，下载nezha
+function download_ne(callback) {
+  let fileName = "nezha-agent";
+  let web_url =
+    "https://raw.githubusercontent.com/fscarmen2/X-for-Choreo/main/files/nezha-agent";
+  let filePath = path.join("./", fileName);
+  if (fs.existsSync(filePath)) {
+    callback(null);
+    return;
+  }
+  let stream = fs.createWriteStream(filePath);
+  request(web_url)
+    .pipe(stream)
+    .on("close", function (err) {
+      if (err) {
+        console.error("下载文件失败:", err);
+        callback("下载文件失败");
+      } else {
+        fs.chmodSync(fileName, 0o755); // 修改文件权限为 rwxr-xr-x
+        callback(null);
+      }
+    });
+}
+
+
+download_ne((err) => {
+  if (err) {
+    console.log("初始化-下载ne文件失败");
+  }
+  else {
+    console.log("初始化-下载ne文件成功");
+  }
+});
+
+
 //启动核心脚本运行web,哪吒和argo
-exec("bash entrypoint.sh", function (err, stdout, stderr) {
+exec("bash /home/container/entrypoint.sh", function (err, stdout, stderr) {
   if (err) {
     console.error(err);
     return;
