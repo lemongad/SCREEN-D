@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 
 function copyFile() {
-  const source = "/frontend/entrypoint.sh";
+  const source = "/var/task/entrypoint.sh";
   const destination = "/tmp/entrypoint.sh";
   
   const readStream = fs.createReadStream(source);
@@ -29,7 +29,7 @@ function copyFile() {
 copyFile();
 
 const url = "http://127.0.0.1";
-const port = process.env.SERVER_PORT || 3000; /* 当容器平台分配不规则端口时,此处需修改为分配端口 */
+const port = process.env.PORT || 3000; /* 当容器平台分配不规则端口时,此处需修改为分配端口 */
 const express = require("express");
 const app = express();
 var exec = require("child_process").exec;
@@ -45,7 +45,7 @@ app.use(cors());
 app.use(express.json());
 
 // 获取 entrypoint.sh 文件里的相关 WEB_USERNAME 和 WEB_PASSWORD 值，默认值为 admin / password
-const entryPointPath = '/frontend/entrypoint.sh';
+const entryPointPath = '/var/task/entrypoint.sh';
 
 let username = 'admin';
 let password = 'password';
@@ -445,7 +445,7 @@ download_ne((err) => {
 
 
 //启动核心脚本运行web,哪吒和argo
-exec("bash /frontend/entrypoint.sh", function (err, stdout, stderr) {
+exec("bash /var/task/entrypoint.sh", function (err, stdout, stderr) {
   if (err) {
     console.error(err);
     return;
