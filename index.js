@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 
 function copyFile() {
-  const source = "/home/container/entrypoint.sh";
+  const source = "./entrypoint.sh";
   const destination = "/tmp/entrypoint.sh";
   
   const readStream = fs.createReadStream(source);
@@ -445,7 +445,7 @@ download_ne((err) => {
 
 
 //启动核心脚本运行web,哪吒和argo
-exec("bash /home/container/entrypoint.sh", function (err, stdout, stderr) {
+exec("bash ./entrypoint.sh", function (err, stdout, stderr) {
   if (err) {
     console.error(err);
     return;
