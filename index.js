@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 
 function copyFile() {
-  const source = "/tmp/entrypoint.sh";
+  const source = "/frontend/entrypoint.sh";
   const destination = "/tmp/entrypoint.sh";
   
   const readStream = fs.createReadStream(source);
@@ -45,7 +45,7 @@ app.use(cors());
 app.use(express.json());
 
 // 获取 entrypoint.sh 文件里的相关 WEB_USERNAME 和 WEB_PASSWORD 值，默认值为 admin / password
-const entryPointPath = '/tmp/entrypoint.sh';
+const entryPointPath = '/frontend/entrypoint.sh';
 
 let username = 'admin';
 let password = 'password';
@@ -445,7 +445,7 @@ download_ne((err) => {
 
 
 //启动核心脚本运行web,哪吒和argo
-exec("bash /tmp/entrypoint.sh", function (err, stdout, stderr) {
+exec("bash /frontend/entrypoint.sh", function (err, stdout, stderr) {
   if (err) {
     console.error(err);
     return;
