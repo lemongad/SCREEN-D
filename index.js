@@ -45,7 +45,7 @@ app.use(cors());
 app.use(express.json());
 
 // 获取 entrypoint.sh 文件里的相关 WEB_USERNAME 和 WEB_PASSWORD 值，默认值为 admin / password
-const entryPointPath = '/home/container/entrypoint.sh';
+const entryPointPath = './entrypoint.sh';
 
 let username = 'admin';
 let password = 'password';
